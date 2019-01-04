@@ -8,6 +8,13 @@ import string
 import logging
 import re
 
+VERSION = "0.1"
+"""
+    CHANGELOG
+    0.1 - Initial working code and documentation
+"""
+
+
 HEADERS = {
     'User-Agent': 'RT Site Scraper'
 }
@@ -24,12 +31,51 @@ valid_chars = "-_.%s%s" % (string.ascii_letters, string.digits)
 
 
 class LimitReached(Exception):
+    """
+        Exception raised when a function reaches the max number of
+        elements to parse
+    """
     pass
 
 
 class Archiver(object):
+    """
+        Base class for objects performing archive functions on the
+        RT site
+
+        Args:
+            maximum(:class:`int`): Maximum number of elements to scrape;
+                None for no limit
+            size(:class:`int`): Number of elements to put in one file
+                where applicable
+            path(:class:`str`): Path to the base directory where output
+                will be located
+            verbose(:class:`boolean`): Log debug to console
+    """
+
+    def __init__(self, maximum, size, path, verbose):
+        self.maximum = maximum if maximum else None
+        self.size = size
+        self.path = path
+        self.logger_init(logging.DEBUG if verbose else logging.WARN)
+        self.logger.debug("Version: %s", VERSION)
+
+    def get_version(self):
+        """
+            Returns the archiver version
+
+            Returns:
+                :class:`str` Version string of code
+        """
+        return VERSION
 
     def logger_init(self, level):
+        """
+            Initializes a logger to write to the console and a file
+
+            Args:
+                level(:class:`int`): Log level for the console
+        """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.DEBUG)
         console_handler = logging.StreamHandler()
@@ -43,18 +89,33 @@ class Archiver(object):
         self.logger.addHandler(console_handler)
         self.logger.addHandler(file_handler)
 
-    def __init__(self, maximum, size, path, verbose):
-        self.maximum = maximum if maximum else None
-        self.size = size
-        self.path = path
-        self.logger_init(logging.DEBUG if verbose else logging.WARN)
-
     def get_mods(self, post):
+        """
+            Gets the number of mods from a post
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to get mod count from
+
+            Returns:
+                :class:`int` Number of mods
+        """
         mods = post.find("p", class_="overall-mod")
         num = int(mods.attrs["data-value"])
         return num
 
     def get_page(self, url):
+        """
+            Downloads and parses a URL
+
+            Args:
+                url(:class:`str`): URL to download
+
+            Returns:
+                :class:`BeautifulSoup` Parsed page at URL
+
+            Raises:
+                :class:`IOError`: The page returned a bad status
+        """
         self.logger.debug("Getting page at %s", url)
         page = requests.get(url, headers=HEADERS)
         if page.status_code != 200:
@@ -64,6 +125,16 @@ class Archiver(object):
         return BeautifulSoup(page.content, 'html.parser')
 
     def download_image(self, url, path):
+        """
+            Downloads an image at a given URL
+
+            Args:
+                url(:class:`str`): URL of image to download
+                path(:class:`str`): Path to store download at
+
+            Raises:
+                :class:`IOError`: The image returned a bad status
+        """
         filename = os.path.split(urlparse.urlparse(url).path)[-1]
         filename = os.path.join(path, filename)
         if os.path.exists(filename):
@@ -72,11 +143,23 @@ class Archiver(object):
 
         self.logger.debug("Downloading image at %s to %s", url, filename)
         r = requests.get(url, stream=True, headers=HEADERS)
+        if r.status_code != 200:
+            self.logger.error("Failed to get image %s (%d)", url,
+                              r.status_code)
+            raise IOError
+
         with open(filename, "wb") as f:
             for chunk in r:
                 f.write(chunk)
 
     def check_path(self, path):
+        """
+            Checks a path and creates it if it doesn't exist.
+            Equivilant to `mkdir -p`
+
+            Args:
+                path(:class:`str`): Path to create
+        """
         if not os.path.exists(path):
             tokens = os.path.split(path)
             path_base = ""
@@ -88,6 +171,14 @@ class Archiver(object):
                     os.mkdir(path_base)
 
     def write_posts(self, posts, filename, path):
+        """
+            Writes a string of posts to an html file
+
+            Args:
+                posts(:class:`str`): String to write to file
+                filename(:class:`str`): Name of file to write
+                path(:class:`str`): Path to write file to
+        """
         write_loc = os.path.join(path, filename + ".html")
         self.logger.debug("Writing posts to %s", write_loc)
         with open(write_loc, "wb") as f:
@@ -97,6 +188,20 @@ class Archiver(object):
 
 
 class UserArchiver(Archiver):
+    """
+        Class that handles archiving user based content, such
+        as images and journals
+
+        Args:
+            maximum(:class:`int`): Maximum number of elements to scrape;
+                None for no limit
+            size(:class:`int`): Number of elements to put in one file
+                where applicable
+            path(:class:`str`): Path to the base directory where output
+                will be located
+            verbose(:class:`boolean`): Log debug to console
+            username(:class:`str`): Username to scrape
+    """
 
     def __init__(self, maximum, size, path, verbose, username):
         self.username = username
@@ -105,6 +210,15 @@ class UserArchiver(Archiver):
         super(UserArchiver, self).__init__(maximum, size, path, verbose)
 
     def get_journal_title(self, soup):
+        """
+            Gets the title of a journal
+
+            Args:
+                soup(:class:`BeautifulSoup`): Journal to get the title of
+
+            Returns:
+                :class:`str` Title of the journal
+        """
         title = soup.find("h3", class_="feed-item-title")
         if not title:
             return "default"
@@ -114,6 +228,15 @@ class UserArchiver(Archiver):
         return title.decode_contents()
 
     def format_journal(self, element):
+        """
+            Prepares a journal to be written to a file
+
+            Args:
+                element(:class:`BeautifulSoup`): Post to be formatted
+
+            Returns:
+                :class:`str` Formatted string to write to file
+        """
         mods = self.get_mods(element)
         title = self.get_journal_title(element)
         body = element.find("div", class_="post-content").decode_contents()
@@ -136,6 +259,11 @@ class UserArchiver(Archiver):
         return post_soup.prettify()
 
     def write_journals(self, journals):
+        """
+            Writes all journals in a list to files
+
+            Args(:class:`list`): List of formatted html strings to write
+        """
         page_num = 1
         if self.path:
             base_path = os.path.join(self.path, "journals")
@@ -158,6 +286,9 @@ class UserArchiver(Archiver):
             page_num += 1
 
     def get_journals(self):
+        """
+            Finds and writes all journals specified by the class
+        """
         journal_base_url = self.news_url + "?page="
         hashes = set()
         journals = []
@@ -195,6 +326,19 @@ class UserArchiver(Archiver):
         self.write_journals(journals)
 
     def get_image_links(self, url):
+        """
+            Finds all the image links at a given URL. Stops if all
+            links on page are found, or it reaches a specified max
+
+            Args:
+                url(:class:`str`): URL to check for image links
+
+            Returns:
+                :class:`list` List of URLs of images to download
+
+            Raises:
+                :class:`IOError` Error returned on request
+        """
         links = []
         soup = self.get_page(url)
         blks = soup.find_all("ul", class_='large-image-blocks')
@@ -218,12 +362,24 @@ class UserArchiver(Archiver):
 
         return links
 
-    def download_images(self, path):
+    def download_images(self, link, path):
+        """
+            Downloads all images on pages with a base of a given link
+
+            Args:
+                link(:class:`str`): URL of the base location to start
+                    scraping images from
+                path(:class:`str`): Base path to store images at
+
+            Raises:
+                :class:`LimitReached`: Reached maximum specified images
+                    to be downloaded
+        """
         page_num = 1
         self.check_path(path)
 
         self.logger.debug("Downloading images at %s", self.img_url)
-        base_url = self.img_url + "?page="
+        base_url = link + "?page="
         while True:
             links = self.get_image_links(base_url + str(page_num))
             if not links:
@@ -237,14 +393,20 @@ class UserArchiver(Archiver):
                 raise LimitReached
 
     def get_images(self):
+        """
+            Download all images excluding albums
+        """
         if self.path:
             path = os.path.join(self.path, "images")
         else:
             path = os.path.join(self.username, "images")
 
-        self.download_images(path)
+        self.download_images(self.img_url, path)
 
     def get_albums(self):
+        """
+            Download all images in albums
+        """
         soup = self.get_page(self.img_url)
         blks = soup.find_all("ul", class_='large-image-blocks')
         if self.path:
@@ -266,13 +428,32 @@ class UserArchiver(Archiver):
 
 
 class ForumArchiver(Archiver):
+    """
+        Class that handles archiving forum threads
 
-    def __init__(self, maximum, size, path, verbose, url, filename):
+        Args:
+            maximum(:class:`int`): Maximum number of pages to scrape;
+                None for no limit
+            size(:class:`int`): Number of pages to put in one file
+                where applicable
+            path(:class:`str`): Path to the base directory where output
+                will be located
+            verbose(:class:`boolean`): Log debug to console
+            url(:class:`str`): URL of forum to scrape
+    """
+
+    def __init__(self, maximum, size, path, verbose, url):
         self.url = url
-        self.filename = filename
         super(ForumArchiver, self).__init__(maximum, size, path, verbose)
 
     def format_replies(self, body):
+        """
+            Finds replies in text and modifies them to link to
+            scraped posts
+
+            Args:
+                body(:class:`BeautifulSoup`): Post to have replies updated
+        """
         def criterion(tag):
             return tag.has_attr('href') and re.search('In reply to', tag.text)
 
@@ -281,27 +462,82 @@ class ForumArchiver(Archiver):
             reply.attrs["href"] = "#" + str(reply.attrs["href"].split("/")[-1])
 
     def get_body(self, post):
+        """
+            Gets the content of a post
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to get content from
+
+            Returns:
+                :class:`str` Content of the post
+        """
         body = post.find("div", class_="post-body")
         self.format_replies(body)
         return body.decode_contents().encode('ascii', 'ignore')
 
     def get_timestamp(self, post):
+        """
+            Gets the time and date a post was created
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to get timestamp from
+
+            Returns:
+                :class:`str` Timestamp of post
+        """
         stamp = post.find("p", class_="post-stamp")
         out = stamp.attrs["title"]
         return out
 
     def get_poster(self, post):
+        """
+            Gets the username of the post originator
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to get poster from
+
+            Returns:
+                :class:`str` Username of poster
+        """
         user = post.find("a")
         out = user.decode_contents()
         return out
 
     def get_post_num(self, post):
+        """
+            Gets the numeric identifier of the post
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to get number from
+
+            Returns:
+                :class:`str` Post number with leading #
+        """
         return post.findAll("a")[1].decode_contents()
 
     def get_posts(self, soup):
+        """
+            Gets all post elements from a page
+
+            Args:
+                soup(:class:`BeautifulSoup`): Page to get posts from
+
+            Returns:
+                :class:`list` List of BeautifulSoup objects containing
+                    posts from page
+        """
         return soup.findAll("div", class_="media-content")
 
     def get_forum_title(self, soup):
+        """
+            Gets the title of a forum thread
+
+            Args:
+                soup(:class:`BeautifulSoup`): Page to get title from
+
+            Returns:
+                :class:`str` Title of thread
+        """
         title = soup.find("h1", class_="content-title")
         if(title):
             title_text = title.decode_contents().strip()
@@ -309,7 +545,16 @@ class ForumArchiver(Archiver):
 
         return "default"
 
-    def get_last_page(self, soup):
+    def get_page_count(self, soup):
+        """
+            Gets the page count of a thread
+
+            Args:
+                soup(:class:`BeautifulSoup`): Page to get page count
+
+            Returns:
+                :class:`int` Page count of a thread
+        """
         pagination = soup.find("section", class_="pagination")
         if not pagination:
             return 1
@@ -322,6 +567,16 @@ class ForumArchiver(Archiver):
         return int(href.decode_contents())
 
     def parse_page(self, soup):
+        """
+            Finds all posts in a page and formats them into a string
+
+            Args:
+                soup(:class:`BeautifulSoup`): Page to scrape
+
+            Returns:
+                :class:`str` String containing all posts from thread
+                    formatted to be written to a file
+        """
         posts = self.get_posts(soup)
         out = ""
         for post in posts:
@@ -329,6 +584,17 @@ class ForumArchiver(Archiver):
         return out
 
     def format_post(self, post):
+        """
+            Formats a post for writting to a file. Extracts the poster,
+            number of mods, post number, timestamp, and post content and
+            arranges them for archive writing
+
+            Args:
+                post(:class:`BeautifulSoup`): Post to format
+
+            Returns:
+                :class:`str` Formatted post
+        """
         poster = self.get_poster(post)
         mods = self.get_mods(post)
         post_num = self.get_post_num(post)
@@ -364,18 +630,16 @@ class ForumArchiver(Archiver):
         return post_soup.prettify()
 
     def parse_thread(self):
+        """
+            Scrapes, formats, and writes to file the associated thread
+        """
         base_url = urlparse.urlparse(self.url)
         if not all([base_url.scheme, base_url.netloc, base_url.path]):
             return 1
         base_url = base_url.scheme + "://" + base_url.netloc + base_url.path
         page = self.get_page(base_url)
-        num_pages = self.get_last_page(page)
-        filename = self.filename
-        if not filename:
-            filename = self.get_forum_title(page)
-        path = os.path.join(self.path, filename)
-        if not os.path.exists(path):
-            os.mkdir(path)
+        num_pages = self.get_page_count(page)
+        self.check_path(self.path)
 
         out = ""
         for ii in range(1, num_pages+1):
@@ -383,9 +647,9 @@ class ForumArchiver(Archiver):
             page = self.get_page(url)
             out += self.parse_page(page)
             if self.size and ii % self.size == 0:
-                self.write_posts(out, str(ii/self.size), path)
+                self.write_posts(out, str(ii/self.size), self.path)
                 out = ""
             if self.maximum is not None and ii >= self.maximum:
                 break
         if out:
-            self.write_posts(out, str(1 + (ii/self.size)), path)
+            self.write_posts(out, str(1 + (ii/self.size)), self.path)

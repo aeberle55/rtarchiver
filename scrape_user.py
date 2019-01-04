@@ -3,7 +3,7 @@
 import sys
 import argparse
 
-from rtarchive import LimitReached, UserArchiver
+from rtarchive import LimitReached, UserArchiver, VERSION
 
 
 BASE_URL = "https://roosterteeth.com/user/"
@@ -18,6 +18,8 @@ parser.add_argument("-m", "--max", type=int, default=0,
                     help="Max number of items to parse; 0 for unlimited")
 parser.add_argument("-s", "--size", type=int, default=25,
                     help="Max number of journal pages per file")
+parser.add_argument('-V', '--version', action='store_true',
+                    help="Print version and exit")
 parser.add_argument('-v', '--verbose', action='store_true',
                     help="Print debug")
 
@@ -26,6 +28,10 @@ def main():
     args = parser.parse_args()
     user = UserArchiver(args.max, args.size, args.path, args.verbose,
                         args.username)
+
+    if args.version:
+        print(user.get_version())
+        return 0
 
     user.logger.debug("Username: %s", args.username)
     user.logger.debug("Path: %s", args.path)
