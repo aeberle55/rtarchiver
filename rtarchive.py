@@ -7,6 +7,10 @@ import urlparse
 import string
 import logging
 import re
+import threading
+
+from requests.sessions import InvalidSchema
+from requests.models import MissingSchema
 
 VERSION = "0.1"
 """
@@ -38,7 +42,7 @@ class LimitReached(Exception):
     pass
 
 
-class Archiver(object):
+class Archiver(threading.Thread):
     """
         Base class for objects performing archive functions on the
         RT site
@@ -53,12 +57,34 @@ class Archiver(object):
             verbose(:class:`boolean`): Log debug to console
     """
 
-    def __init__(self, maximum, size, path, verbose):
+    def __init__(self, maximum, size, path, verbose, thread_cb, progress_label):
         self.maximum = maximum if maximum else None
         self.size = size
         self.path = path
         self.logger_init(logging.DEBUG if verbose else logging.WARN)
+        self.stoprequest = threading.Event()
+        self.thread_cb = thread_cb
+        self.progress_label = progress_label
+        threading.Thread.__init__(self)
         self.logger.debug("Version: %s", VERSION)
+
+    def join(self, timeout=None):
+        self.stoprequest.set()
+        super(Archiver,self).join(timeout)
+
+    def cleanup(self):
+        if self.thread_cb:
+            try:
+                self.thread_cb()
+            except RuntimeError:
+                self.logger.warn("Window closed while scraping active")
+
+    def write_update(self, update):
+        if self.progress_label:
+            try:
+                self.progress_label.set(update)
+            except RuntimeError:
+                pass
 
     def get_version(self):
         """
@@ -203,11 +229,36 @@ class UserArchiver(Archiver):
             username(:class:`str`): Username to scrape
     """
 
-    def __init__(self, maximum, size, path, verbose, username):
+
+    def __init__(self, maximum, size, path, verbose, username, thread_cb,
+                 progress_label):
         self.username = username
         self.news_url = "https://roosterteeth.com/user/" + username
         self.img_url = self.news_url + "/images"
-        super(UserArchiver, self).__init__(maximum, size, path, verbose)
+        super(ForumArchiver, self).__init__(maximum, size, path, verbose,
+                                            thread_cb, progress_label)
+
+    def verify_username(self):
+        """
+            Verifies existance of the username associated with this object
+
+            Returns:
+                :class:`boolean` True if user exists, false otherwise
+
+            Raises:
+                :class:`IOError` An unknown network error occured
+        """
+        r = requests.get(self.news_url, headers=HEADERS)
+        if r.status_code == 200:
+            self.logger.debug("User %s exists", self.username)
+            return True
+        if r.status_code == 404:
+            self.logger.debug("User %s does not exist", self.username)
+        else:
+            self.logger.error("Unknown status code verifying user %s (%d)",
+                              self.username, r.status_code)
+            raise IOError
+        return False
 
     def get_journal_title(self, soup):
         """
@@ -347,7 +398,7 @@ class UserArchiver(Archiver):
                 link = tag.attrs['href']
                 if link.rfind("album") != -1:
                     break
-                imgpg = requests.get(str(link))
+                imgpg = requests.get(str(link), headers=HEADERS)
                 if imgpg.status_code != 200:
                     self.logger.error("Could not access %s (%d)", str(link),
                                       imgpg.status_code)
@@ -442,9 +493,38 @@ class ForumArchiver(Archiver):
             url(:class:`str`): URL of forum to scrape
     """
 
-    def __init__(self, maximum, size, path, verbose, url):
+    def __init__(self, maximum, size, path, verbose, url, thread_cb,
+                 progress_label):
         self.url = url
-        super(ForumArchiver, self).__init__(maximum, size, path, verbose)
+        super(ForumArchiver, self).__init__(maximum, size, path, verbose,
+                                            thread_cb, progress_label)
+
+    def verify_forum(self):
+        """
+            Verifies existance of the forum associated with this object
+
+            Returns:
+                :class:`boolean` True if thread exists, false otherwise
+
+            Raises:
+                :class:`IOError` An unknown network error occured
+        """
+        try:
+            r = requests.get(self.url, headers=HEADERS)
+        except (InvalidSchema, MissingSchema):
+            self.logger.error("Malformed URL %s", self.url)
+            return False
+
+        if r.status_code == 200:
+            self.logger.debug("Thread at %s exists", self.url)
+            return True
+        if r.status_code == 404:
+            self.logger.debug("Thread %s does not exist", self.url)
+        else:
+            self.logger.error("Unknown status code verifying thread %s (%d)",
+                              self.url, r.status_code)
+            raise IOError
+        return False
 
     def format_replies(self, body):
         """
@@ -539,6 +619,11 @@ class ForumArchiver(Archiver):
                 :class:`str` Title of thread
         """
         title = soup.find("h1", class_="content-title")
+        if self.thread_cb:
+            try:
+                self.thread_cb()
+            except RuntimeError:
+                self.logger.warn("Window closed while scraping active")
         if(title):
             title_text = title.decode_contents().strip()
             return ''.join(c for c in title_text if c in valid_chars)
@@ -642,14 +727,27 @@ class ForumArchiver(Archiver):
         self.check_path(self.path)
 
         out = ""
+        if self.maximum is not None:
+            num_pages = min(self.maximum, num_pages)
         for ii in range(1, num_pages+1):
             url = base_url + "?page=" + str(ii)
+            self.write_update("Scraping page %d of %d" % (ii, num_pages))
             page = self.get_page(url)
             out += self.parse_page(page)
             if self.size and ii % self.size == 0:
                 self.write_posts(out, str(ii/self.size), self.path)
                 out = ""
-            if self.maximum is not None and ii >= self.maximum:
+            if self.stoprequest.isSet():
+                self.logger.debug("Halting due to join request")
                 break
         if out:
             self.write_posts(out, str(1 + (ii/self.size)), self.path)
+            self.write_update("Wrote %d pages to %d files" %
+                              (ii, (1+(ii/self.size))))
+        else:
+            self.write_update("Wrote %d pages to %d files" %
+                              (ii, (ii/self.size)))
+        self.cleanup()
+
+    def run(self):
+        self.parse_thread()
