@@ -1,10 +1,7 @@
 # rtarchiver
 Archive threads, journals, and images from the legacy Roosterteeth site
 
-WARNING: The [RT ToU](https://roosterteeth.com/terms-of-use) Section 14 states:
->You agree that you will not ... Develop, support or use software, devices, scripts, robots, or any other means or processes (including crawlers, browser plugins and add-ons, or any other technology) to scrape the Services or otherwise copy profiles and other data from the Services
-
-As this code is explicitly designed to scrape the Roosterteeth site it is provided FOR EDUCATIONAL PURPOSES ONLY. You should not follow any instructions here related to running this code.
+Note that the [RT ToU](https://roosterteeth.com/terms-of-use) Section 14 disallows the scraping of the site. While this project does have the approval of RT Engineering, it is still offered for Educational Purposes Only.
 
 ## Executable Instructions
 
