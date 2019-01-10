@@ -8,14 +8,19 @@ import string
 import logging
 import re
 import threading
+import Queue
 
 from requests.sessions import InvalidSchema
 from requests.models import MissingSchema
 
-VERSION = "0.1"
+VERSION = "0.2"
 """
     CHANGELOG
     0.1 - Initial working code and documentation
+    0.2 - Many tweaks for GUI specific functionality
+          Makes archivers threaded objects
+          Adds multithreading to Image Link Downloads
+          Many bugfixes and improvements
 """
 
 
@@ -42,6 +47,38 @@ class LimitReached(Exception):
     pass
 
 
+class LinkDownloadThread(threading.Thread):
+    """
+        Handles the parallel scraping of image links
+
+        Args:
+            link(:class:`str`): URL to get image link from
+            link_queue(:class:`Queue.Queue`): Queue to place image
+                link in on completion
+            err_queue(:class:`Queue.Queue`): Queue to place exceptions in
+                on failure
+            logger(:class:`logger`): Logging object
+    """
+
+    def __init__(self, link, link_queue, err_queue, logger):
+        self.link = link
+        self.link_queue = link_queue
+        self.err_queue = err_queue
+        self.logger = logger
+        threading.Thread.__init__(self)
+
+    def run(self):
+        imgpg = requests.get(str(self.link), headers=HEADERS)
+        if imgpg.status_code != 200:
+            self.logger.error("Could not access %s (%d)", self.link,
+                              imgpg.status_code)
+            self.err_queue.put(IOError)
+            return
+        im_soup = BeautifulSoup(imgpg.content, 'html.parser')
+        im = im_soup.find("img", class_="full-image")
+        self.link_queue.put("http:" + im.attrs["src"])
+
+
 class Archiver(threading.Thread):
     """
         Base class for objects performing archive functions on the
@@ -55,6 +92,9 @@ class Archiver(threading.Thread):
             path(:class:`str`): Path to the base directory where output
                 will be located
             verbose(:class:`boolean`): Log debug to console
+            thread_cb(:class:`function`): Function to call when thread completes
+            progress_label(:class:`tk.StringVar`): Location to write updates
+                to for the GUI
     """
 
     def __init__(self, maximum, size, path, verbose, thread_cb, progress_label):
@@ -68,11 +108,27 @@ class Archiver(threading.Thread):
         threading.Thread.__init__(self)
         self.logger.debug("Version: %s", VERSION)
 
+    def verify(self):
+        """
+            Verifies that the location being scraped exists
+
+            Returns:
+                :class:`boolean` True if location exists, false otherwise
+        """
+        return True
+
     def join(self, timeout=None):
+        """
+            Causes the thread to abort
+        """
         self.stoprequest.set()
-        super(Archiver,self).join(timeout)
+        super(Archiver, self).join(timeout)
 
     def cleanup(self):
+        """
+            Performs final actions on thread completion
+        """
+        self.write_update("Complete!")
         if self.thread_cb:
             try:
                 self.thread_cb()
@@ -162,6 +218,7 @@ class Archiver(threading.Thread):
                 :class:`IOError`: The image returned a bad status
         """
         filename = os.path.split(urlparse.urlparse(url).path)[-1]
+        self.write_update("Downloading image %s" % filename)
         filename = os.path.join(path, filename)
         if os.path.exists(filename):
             self.logger.debug("File exists, skipping %s", filename)
@@ -227,6 +284,9 @@ class UserArchiver(Archiver):
                 will be located
             verbose(:class:`boolean`): Log debug to console
             username(:class:`str`): Username to scrape
+            thread_cb(:class:`function`): Function to call when thread completes
+            progress_label(:class:`tk.StringVar`): Location to write updates
+                to for the GUI
     """
 
 
@@ -235,10 +295,12 @@ class UserArchiver(Archiver):
         self.username = username
         self.news_url = "https://roosterteeth.com/user/" + username
         self.img_url = self.news_url + "/images"
-        super(ForumArchiver, self).__init__(maximum, size, path, verbose,
-                                            thread_cb, progress_label)
+        super(UserArchiver, self).__init__(maximum, size, path, verbose,
+                                           thread_cb, progress_label)
 
-    def verify_username(self):
+        self.path = os.path.join(self.path, self.username)
+
+    def verify(self):
         """
             Verifies existance of the username associated with this object
 
@@ -347,6 +409,7 @@ class UserArchiver(Archiver):
         page_num = 1
         try:
             while True:
+                self.write_update("Scraping journal page %d" % page_num)
                 activity = self.get_page(journal_base_url + str(page_num))
                 page_num += 1
                 elements = activity.findAll("div", class_="media-content")
@@ -370,6 +433,10 @@ class UserArchiver(Archiver):
                             num_journals >= self.maximum:
                         raise LimitReached
 
+                if self.stoprequest.isSet():
+                    self.logger.debug("Halting due to join request")
+                    break
+
         except LimitReached:
             pass
 
@@ -390,28 +457,39 @@ class UserArchiver(Archiver):
             Raises:
                 :class:`IOError` Error returned on request
         """
-        links = []
         soup = self.get_page(url)
         blks = soup.find_all("ul", class_='large-image-blocks')
+
+        link_queue = Queue.Queue()
+        err_queue = Queue.Queue()
+        threads = []
+
         for blk in blks:
             for tag in blk.find_all("a"):
                 link = tag.attrs['href']
                 if link.rfind("album") != -1:
                     break
-                imgpg = requests.get(str(link), headers=HEADERS)
-                if imgpg.status_code != 200:
-                    self.logger.error("Could not access %s (%d)", str(link),
-                                      imgpg.status_code)
-                    raise IOError
-                im_soup = BeautifulSoup(imgpg.content, 'html.parser')
-                im = im_soup.find("img", class_="full-image")
-                links.append("http:" + im.attrs["src"])
+                thread = LinkDownloadThread(str(link), link_queue, err_queue,
+                                            self.logger)
+                thread.start()
+
+                threads.append(thread)
                 if self.maximum is not None:
                     self.maximum -= 1
-                    if self.maximum <= 0:
-                        return links
 
-        return links
+                if self.maximum == 0:
+                    break
+
+            if self.maximum == 0:
+                break
+
+        for thread in threads:
+            thread.join()
+
+        if not err_queue.empty():
+            raise err_queue.get()
+
+        return list(link_queue.queue)
 
     def download_images(self, link, path):
         """
@@ -432,6 +510,7 @@ class UserArchiver(Archiver):
         self.logger.debug("Downloading images at %s", self.img_url)
         base_url = link + "?page="
         while True:
+            self.write_update("Analyzing image page %d" % page_num)
             links = self.get_image_links(base_url + str(page_num))
             if not links:
                 break
@@ -439,9 +518,14 @@ class UserArchiver(Archiver):
             page_num += 1
             for link in links:
                 self.download_image(link, path)
+                if self.stoprequest.isSet():
+                    break
 
             if self.maximum is not None and self.maximum <= 0:
                 raise LimitReached
+            if self.stoprequest.isSet():
+                self.logger.debug("Halting due to join request")
+                break
 
     def get_images(self):
         """
@@ -476,6 +560,34 @@ class UserArchiver(Archiver):
                                      if c in valid_chars)
                 path = os.path.join(base_path, album_name)
                 self.download_images(link, path)
+                if self.stoprequest.isSet():
+                    return
+
+
+class ImageArchiver(UserArchiver):
+    """
+        Wrapper for image download portion of the UserArchiver class
+    """
+
+    def run(self):
+        try:
+            self.get_images()
+            if not self.stoprequest.isSet():
+                self.get_albums()
+        except LimitReached:
+            pass
+
+        self.cleanup()
+
+
+class JournalArchiver(UserArchiver):
+    """
+        Wrapper for journal download portion of the UserArchiver class
+    """
+
+    def run(self):
+        self.get_journals()
+        self.cleanup()
 
 
 class ForumArchiver(Archiver):
@@ -491,6 +603,9 @@ class ForumArchiver(Archiver):
                 will be located
             verbose(:class:`boolean`): Log debug to console
             url(:class:`str`): URL of forum to scrape
+            thread_cb(:class:`function`): Function to call when thread completes
+            progress_label(:class:`tk.StringVar`): Location to write updates
+                to for the GUI
     """
 
     def __init__(self, maximum, size, path, verbose, url, thread_cb,
@@ -499,7 +614,7 @@ class ForumArchiver(Archiver):
         super(ForumArchiver, self).__init__(maximum, size, path, verbose,
                                             thread_cb, progress_label)
 
-    def verify_forum(self):
+    def verify(self):
         """
             Verifies existance of the forum associated with this object
 
@@ -723,6 +838,8 @@ class ForumArchiver(Archiver):
             return 1
         base_url = base_url.scheme + "://" + base_url.netloc + base_url.path
         page = self.get_page(base_url)
+        title = self.get_forum_title(page)
+        self.path = os.path.join(self.path, title)
         num_pages = self.get_page_count(page)
         self.check_path(self.path)
 
@@ -747,7 +864,7 @@ class ForumArchiver(Archiver):
         else:
             self.write_update("Wrote %d pages to %d files" %
                               (ii, (ii/self.size)))
-        self.cleanup()
 
     def run(self):
         self.parse_thread()
+        self.cleanup()

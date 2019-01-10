@@ -1,3 +1,6 @@
 *.pyc
 .ropeproject
 *.log
+*.spec
+build
+dist
