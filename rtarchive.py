@@ -13,7 +13,7 @@ import Queue
 from requests.sessions import InvalidSchema
 from requests.models import MissingSchema
 
-VERSION = "0.2"
+VERSION = "0.3"
 """
     CHANGELOG
     0.1 - Initial working code and documentation
@@ -21,6 +21,7 @@ VERSION = "0.2"
           Makes archivers threaded objects
           Adds multithreading to Image Link Downloads
           Many bugfixes and improvements
+    0.3 - Fixes issues related to closing for Windows
 """
 
 

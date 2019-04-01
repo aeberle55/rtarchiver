@@ -39,7 +39,10 @@ class Window(Frame):
         """
             Opens a File Dialog to set the directory to store the archive
         """
-        self.archive_path = filedialog.askdirectory()
+        temp_path = filedialog.askdirectory()
+        if not temp_path:
+            return
+        self.archive_path = temp_path
         self.dir_entry.config(state=tk.NORMAL)
         self.dir_entry.delete(0,tk.END)
         self.dir_entry.insert(0, self.archive_path)
@@ -73,7 +76,6 @@ class Window(Frame):
         """
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
-        tkMessageBox.showinfo("Complete", "Action is complete")
         self.master.quit()
 
     def begin_scraping(self):
@@ -373,11 +375,22 @@ class Window(Frame):
             self.active_thread.join(timeout)
 
 
+
 def main():
     root = Tk()
     app = Window(root)
+    root.forced_close = False
+    def on_close():
+        """
+            Called when exiting by pressing X
+        """
+        root.forced_close = True
+        root.destroy()
+    root.protocol("WM_DELETE_WINDOW",  on_close)
     app.mainloop()
     app.join()
+    if not root.forced_close:
+        tkMessageBox.showinfo("Complete", "Action is complete")
     return 0
 
 if __name__ == "__main__":
