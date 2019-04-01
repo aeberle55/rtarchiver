@@ -267,7 +267,7 @@ class Archiver(threading.Thread):
         self.logger.debug("Writing posts to %s", write_loc)
         with open(write_loc, "wb") as f:
             f.write("<body>")
-            f.write(posts)
+            f.write(posts.encode("utf8"))
             f.write("</body>")
 
 
@@ -354,7 +354,7 @@ class UserArchiver(Archiver):
         mods = self.get_mods(element)
         title = self.get_journal_title(element)
         body = element.find("div", class_="post-content").decode_contents()
-        body = body.encode('ascii', 'ignore')
+        body = body.encode('utf8', 'ignore')
         post_soup = BeautifulSoup("", "html.parser")
 
         header_tag = post_soup.new_tag("h3")
@@ -669,7 +669,7 @@ class ForumArchiver(Archiver):
         """
         body = post.find("div", class_="post-body")
         self.format_replies(body)
-        return body.decode_contents().encode('ascii', 'ignore')
+        return body.decode_contents().encode('utf8', 'ignore')
 
     def get_timestamp(self, post):
         """
