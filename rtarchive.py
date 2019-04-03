@@ -13,7 +13,7 @@ import Queue
 from requests.sessions import InvalidSchema
 from requests.models import MissingSchema
 
-VERSION = "0.3"
+VERSION = "0.4"
 """
     CHANGELOG
     0.1 - Initial working code and documentation
@@ -22,6 +22,7 @@ VERSION = "0.3"
           Adds multithreading to Image Link Downloads
           Many bugfixes and improvements
     0.3 - Fixes issues related to closing for Windows
+    0.4 - Adds feature to scrape friends list
 """
 
 
@@ -649,6 +650,7 @@ class FriendsArchiver(UserArchiver):
     def run(self):
         self.get_friends()
         self.cleanup()
+
 
 class ForumArchiver(Archiver):
     """
