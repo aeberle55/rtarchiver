@@ -7,7 +7,7 @@ import tkMessageBox
 from tkinter import *
 from tkinter import Frame, Tk, Button, BOTH, filedialog
 
-from rtarchive import VERSION, ForumArchiver, JournalArchiver, ImageArchiver
+from rtarchive import VERSION, ForumArchiver, JournalArchiver, ImageArchiver, FriendsArchiver
 
 DEBUG = False
 
@@ -25,7 +25,8 @@ class Window(Frame):
     ARCHIVE_TYPES = [
         ("Scrape Journals", 0),
         ("Scrape Images", 1),
-        ("Scrape Forum", 2)
+        ("Scrape Forum", 2),
+        ("Scrape Friends", 3)
     ]
 
     def __init__(self, master=None):
@@ -61,8 +62,10 @@ class Window(Frame):
             self.display_journal()
         elif archive == 1:
             self.display_images()
-        else:
+        elif archive == 2:
             self.display_forum()
+        else:
+            self.display_friends()
 
     def scrape_cb(self):
         """
@@ -138,7 +141,7 @@ class Window(Frame):
                 tkMessageBox.showerror("Error", "Username not found")
                 self.start_button.config(state=tk.NORMAL)
                 return
-        else:
+        elif archive == 2:
             # Forum archive
             try:
                 self.maximum_pages = int(self.forum_max_entry.get())
@@ -162,6 +165,26 @@ class Window(Frame):
                                                self.progress_text)
             if not self.active_thread.verify():
                 tkMessageBox.showerror("Error", "Forum URL not found")
+                self.start_button.config(state=tk.NORMAL)
+                return
+        else:
+            # Friends archive
+            try:
+                max_friends = int(self.user_max_entry.get())
+            except ValueError:
+                tkMessageBox.showerror("Error", "Max Friends must be numeric")
+                self.start_button.config(state=tk.NORMAL)
+                return
+            username = self.user_entry.get()
+            self.active_thread = FriendsArchiver(max_friends,
+                                                 0,
+                                                 self.archive_path,
+                                                 self.verbose,
+                                                 username,
+                                                 self.scrape_cb,
+                                                 self.progress_text)
+            if not self.active_thread.verify():
+                tkMessageBox.showerror("Error", "Username not found")
                 self.start_button.config(state=tk.NORMAL)
                 return
 
@@ -255,6 +278,12 @@ class Window(Frame):
         """
         self.user_max_label_text.set("Max Downloaded Images (0=No Limit)")
 
+    def init_friends(self):
+        """
+            Initializes friends list archive portion of the GUI
+        """
+        pass
+
     def init_user(self):
         """
             Initializes the user specific portion of the GUI
@@ -271,6 +300,7 @@ class Window(Frame):
 
         self.init_journal()
         self.init_images()
+        self.init_friends()
 
     def withdraw_forum(self):
         """
@@ -294,6 +324,15 @@ class Window(Frame):
         self.journal_pages_entry.grid_forget()
         self.journal_pages_label.grid_forget()
 
+    def withdraw_friends(self):
+        """
+            Hides the friends archive specific portion of the GUI
+        """
+        self.user_entry.grid_forget()
+        self.user_label.grid_forget()
+        self.user_max_entry.grid_forget()
+        self.user_max_label.grid_forget()
+
     def withdraw_images(self):
         """
             Hides the image archive specific portion of the GUI
@@ -310,6 +349,7 @@ class Window(Frame):
         self.withdraw_forum()
         self.withdraw_images()
         self.withdraw_journal()
+        self.withdraw_friends()
 
     def display_forum(self):
         """
@@ -333,6 +373,16 @@ class Window(Frame):
         self.user_max_label.grid(row=1, column=2, sticky=tk.E, pady=10)
         self.journal_pages_entry.grid(row=2, column=3, sticky=tk.W, pady=10)
         self.journal_pages_label.grid(row=2, column=2, sticky=tk.E, pady=10)
+
+    def display_friends(self):
+        """
+            Displays friends archive specific portions of the GUI
+        """
+        self.user_max_label_text.set("Max Friends (0=No Limit)")
+        self.user_entry.grid(row=0, column=3, sticky=tk.W, pady=10)
+        self.user_label.grid(row=0, column=2, sticky=tk.E)
+        self.user_max_entry.grid(row=1, column=3, sticky=tk.W, pady=10)
+        self.user_max_label.grid(row=1, column=2, sticky=tk.E, pady=10)
 
     def display_images(self):
         """
@@ -373,7 +423,6 @@ class Window(Frame):
         """
         if self.active_thread:
             self.active_thread.join(timeout)
-
 
 
 def main():

@@ -295,6 +295,7 @@ class UserArchiver(Archiver):
                  progress_label):
         self.username = username
         self.news_url = "https://roosterteeth.com/user/" + username
+        self.friends_url = self.news_url + "/friends"
         self.img_url = self.news_url + "/images"
         super(UserArchiver, self).__init__(maximum, size, path, verbose,
                                            thread_cb, progress_label)
@@ -371,6 +372,55 @@ class UserArchiver(Archiver):
         post_soup.append(post_soup.new_tag("hr"))
 
         return post_soup.prettify()
+
+    def write_friends(self, friends):
+        """
+            Writes a list of friend names to a file
+
+            Args:
+                friends(:class:`list`): List of usernames to be written
+        """
+        if self.path:
+            base_path = self.path
+        else:
+            base_path = self.username
+        self.check_path(base_path)
+
+        path = os.path.join(base_path, "friends.txt")
+        self.logger.debug("Writing posts to %s", path)
+        with open(path, "wb") as f:
+            for friend in friends:
+                f.write(friend + "\n")
+
+    def get_friends(self):
+        """
+            Finds and writes all friends of a user
+        """
+        friends_base_url = self.friends_url + "?page="
+        friends = []
+        page_num = 1
+        try:
+            while True:
+                self.write_update("Scraping friends page %d" % page_num)
+                page = self.get_page(friends_base_url + str(page_num))
+                elements = page.findAll("p", class_="name")
+                if len(elements) == 0:
+                    break
+
+                for element in elements:
+                    friends.append(element.decode_contents().encode('utf8', 'ignore'))
+                    if self.maximum is not None and len(friends) >= self.maximum:
+                        raise LimitReached
+
+                if self.stoprequest.isSet():
+                    self.logger.debug("Halting due to join request")
+                    break
+                page_num += 1
+
+        except LimitReached:
+            pass
+        self.write_update("Found %d friends. Writing to file" % len(friends))
+        self.write_friends(friends)
 
     def write_journals(self, journals):
         """
@@ -590,6 +640,15 @@ class JournalArchiver(UserArchiver):
         self.get_journals()
         self.cleanup()
 
+
+class FriendsArchiver(UserArchiver):
+    """
+        Wrapper for journal download portion of the UserArchiver class
+    """
+
+    def run(self):
+        self.get_friends()
+        self.cleanup()
 
 class ForumArchiver(Archiver):
     """
