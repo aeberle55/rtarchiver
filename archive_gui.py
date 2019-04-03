@@ -4,6 +4,7 @@ import sys
 import os
 import tkinter as tk
 import tkMessageBox
+import webbrowser
 from tkinter import *
 from tkinter import Frame, Tk, Button, BOTH, filedialog
 
@@ -48,6 +49,12 @@ class Window(Frame):
         self.dir_entry.delete(0,tk.END)
         self.dir_entry.insert(0, self.archive_path)
         self.dir_entry.config(state="readonly")
+
+    def open_help(self):
+        """
+            Opens a browser to the github readme
+        """
+        webbrowser.open("https://github.com/aeberle55/rtarchiver")
 
     def set_archive_type(self):
         """
@@ -411,6 +418,9 @@ class Window(Frame):
         self.stop_button = Button(self, text="Stop", state=tk.DISABLED,
                                   command=self.stop_scraping)
         self.stop_button.grid(row=5, column=6, sticky=tk.E, pady=10, padx=5)
+        self.help_button = Button(self, text="Help", state=tk.NORMAL,
+                                  command=self.open_help)
+        self.help_button.grid(row=5, column=4, sticky=tk.E, pady=10)
 
 
     def join(self, timeout=None):
