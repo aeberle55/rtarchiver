@@ -796,11 +796,6 @@ class ForumArchiver(Archiver):
                 :class:`str` Title of thread
         """
         title = soup.find("h1", class_="content-title")
-        if self.thread_cb:
-            try:
-                self.thread_cb()
-            except RuntimeError:
-                self.logger.warn("Window closed while scraping active")
         if(title):
             title_text = title.decode_contents().strip()
             return ''.join(c for c in title_text if c in valid_chars)
