@@ -54,7 +54,7 @@ class Window(Frame):
         """
             Opens a browser to the github readme
         """
-        webbrowser.open("https://github.com/aeberle55/rtarchiver")
+        webbrowser.open("https://github.com/aeberle55/rtarchiver/blob/master/README.md")
 
     def set_archive_type(self):
         """
