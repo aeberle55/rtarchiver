@@ -55,8 +55,64 @@ This will create an executable file with the name `rtarchiver_linux`
 
 Run the executable like any other Linux application
 
-### Other OSs
-Not Supported
+### OSX
+I will provide detailed setup and build instructions as at this time I do not have access to an OSX machine to build.
+
+Open a  Terminal
+
+Install Homebrew (what's called a package manager) by running:
+
+    /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+
+Follow the prompts it gives. For more details, visit https://brew.sh/
+
+Run the following in Terminal:
+
+    brew install python@2
+
+If it can't find brew, you many need to edit your PATH variable by running:
+
+    open -e ~/.profile
+
+And then adding the following line to the bottom:
+
+    export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+
+Try to run the following command:
+
+    python2 -V
+
+If that fails because it can't locate python, run:
+
+    open -e ~/.profile
+
+And add this line to the bottom:
+
+    export PATH="/usr/local/opt/python@2/libexec/bin:$PATH"
+
+Install the dependencies by running:
+
+    pip2 install requests
+    pip2 install beautifulsoup4
+    pip2 install pyinstaller
+
+Download the RTArchiver source code from this link: https://github.com/aeberle55/rtarchiver/archive/master.zip
+
+Extract the source code
+
+Open a Terminal window or use an existing one and change directory to the directory created when extracting the code. e.g. If you extracted it in your Downloads folder you would run:
+
+    cd ~/Downloads/master/
+
+Verify you can run the archiver by running:
+
+    python2 archive_gui.py
+
+Now run the following:
+
+    pyinstaller --onefile -n rtarchiver_mac archive_gui.py
+
+This should create an executable called `rtarchiver_mac` under a new directory called `dist` under the current directory. Navigate to this directory in your file explorer and then attempt to run the program
 
 ## Version History
 ### 0.1
