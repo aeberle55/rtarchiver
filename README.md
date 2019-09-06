@@ -1,7 +1,12 @@
 # rtarchiver
 Archive threads, journals, and images from the legacy Roosterteeth site
 
-Note that the [RT ToU](https://roosterteeth.com/terms-of-use) Section 14 disallows the scraping of the site. This project does have the approval of RT Engineering.
+Note that the [RT ToU](https://roosterteeth.com/terms-of-use) Section 14 disallows the scraping of the site. This project has been exempt from that rule by RoosterTeeth.
+
+## Setup
+To use, download the latest executable for either Windows or Linux on the [Releases page](https://github.com/aeberle55/rtarchiver/releases). At this time OsX does not have an executable, but best guess instructions are provided below for running it. If you are tech savvy, have access to an OsX system, and would like to help build an executable file please get in contact.
+
+The downloaded executable can be run like any other program. See the Usage section for details on how to use the program.
 
 ## Usage
 This program can be used to scrape various public data from the Legacy RoosterTeeth Site and save to a local device. Specificially, it can save a user's journals, images, or friends list, or download a forum thread. Once an action is completed the program will complete.
