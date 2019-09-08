@@ -13,7 +13,7 @@ import Queue
 from requests.sessions import InvalidSchema
 from requests.models import MissingSchema
 
-VERSION = "0.5"
+VERSION = "1.0"
 """
     CHANGELOG
     0.1 - Initial working code and documentation
@@ -23,7 +23,7 @@ VERSION = "0.5"
           Many bugfixes and improvements
     0.3 - Fixes issues related to closing for Windows
     0.4 - Adds feature to scrape friends list
-    0.5 - Adds feature to scrape group news posts
+    1.0 - Adds feature to scrape group news posts
 """
 
 
