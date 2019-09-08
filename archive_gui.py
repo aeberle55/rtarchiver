@@ -8,7 +8,7 @@ import webbrowser
 from tkinter import *
 from tkinter import Frame, Tk, Button, BOTH, filedialog
 
-from rtarchive import VERSION, ForumArchiver, JournalArchiver, ImageArchiver, FriendsArchiver
+from rtarchive import VERSION, ForumArchiver, JournalArchiver, ImageArchiver, FriendsArchiver, GroupArchiver
 
 DEBUG = False
 
@@ -27,7 +27,8 @@ class Window(Frame):
         ("Scrape Journals", 0),
         ("Scrape Images", 1),
         ("Scrape Forum", 2),
-        ("Scrape Friends", 3)
+        ("Scrape Friends", 3),
+        ("Scrape Groups", 4)
     ]
 
     def __init__(self, master=None):
@@ -71,8 +72,10 @@ class Window(Frame):
             self.display_images()
         elif archive == 2:
             self.display_forum()
-        else:
+        elif archive == 3:
             self.display_friends()
+        else:
+            self.display_group()
 
     def scrape_cb(self):
         """
@@ -174,7 +177,7 @@ class Window(Frame):
                 tkMessageBox.showerror("Error", "Forum URL not found")
                 self.start_button.config(state=tk.NORMAL)
                 return
-        else:
+        elif archive == 3:
             # Friends archive
             try:
                 max_friends = int(self.user_max_entry.get())
@@ -194,7 +197,33 @@ class Window(Frame):
                 tkMessageBox.showerror("Error", "Username not found")
                 self.start_button.config(state=tk.NORMAL)
                 return
-
+        else:
+            # Group archive
+            try:
+                max_news = int(self.group_max_entry.get())
+            except ValueError:
+                tkMessageBox.showerror("Error", "Max News Posts must be numeric")
+                self.start_button.config(state=tk.NORMAL)
+                return
+            try:
+                news_per_page = int(self.news_pages_entry.get())
+            except ValueError:
+                tkMessageBox.showerror("Error", "News posts per page must be "
+                                       "numeric")
+                self.start_button.config(state=tk.NORMAL)
+                return
+            group_name = self.group_entry.get()
+            self.active_thread = GroupArchiver(max_news,
+                                                 news_per_page,
+                                                 self.archive_path,
+                                                 self.verbose,
+                                                 group_name,
+                                                 self.scrape_cb,
+                                                 self.progress_text)
+            if not self.active_thread.verify():
+                tkMessageBox.showerror("Error", "Group name not found")
+                self.start_button.config(state=tk.NORMAL)
+                return
         self.progress_label.grid(row=4, column=4, sticky=tk.W)
         self.active_thread.start()
         self.active_thread = self.active_thread
@@ -291,6 +320,23 @@ class Window(Frame):
         """
         pass
 
+    def init_group(self):
+        """
+            Initializes Group News archive portion of the GUI
+        """
+        self.news_pages_entry = tk.Entry(self, width=5, text="25")
+        self.news_pages_label = tk.Label(self, text="News posts per file")
+        self.group_entry = tk.Entry(self, width=20, validate='key',
+                                   vcmd=self.username_entered)
+        self.group_label = tk.Label(self, text="Group Name:")
+
+        self.group_max_entry = tk.Entry(self, width=5)
+        self.group_max_entry.insert(0, "0")
+        self.group_max_label_text = tk.StringVar()
+        self.group_max_label = tk.Label(self,
+                                       textvariable=self.group_max_label_text)
+        self.group_max_label_text.set("Max Downloaded News Posts (0=No Limit)")
+
     def init_user(self):
         """
             Initializes the user specific portion of the GUI
@@ -308,6 +354,7 @@ class Window(Frame):
         self.init_journal()
         self.init_images()
         self.init_friends()
+        self.init_group()
 
     def withdraw_forum(self):
         """
@@ -349,6 +396,17 @@ class Window(Frame):
         self.user_max_entry.grid_forget()
         self.user_max_label.grid_forget()
 
+    def withdraw_group(self):
+        """
+            Hides the group news archive specific portions of the GUI
+        """
+        self.group_entry.grid_forget()
+        self.group_label.grid_forget()
+        self.group_max_entry.grid_forget()
+        self.group_max_label.grid_forget()
+        self.news_pages_entry.grid_forget()
+        self.news_pages_label.grid_forget()
+
     def withdraw_all(self):
         """
             Hides all archive type specific elements from the GUI
@@ -357,6 +415,7 @@ class Window(Frame):
         self.withdraw_images()
         self.withdraw_journal()
         self.withdraw_friends()
+        self.withdraw_group()
 
     def display_forum(self):
         """
@@ -400,6 +459,19 @@ class Window(Frame):
         self.user_label.grid(row=0, column=2, sticky=tk.E)
         self.user_max_entry.grid(row=1, column=3, sticky=tk.W, pady=10)
         self.user_max_label.grid(row=1, column=2, sticky=tk.E, pady=10)
+
+    def display_group(self):
+        """
+            Displays grouip archive specific portions of the GUI
+        """
+        #self.group_max_label_text.set("Max Downloaded News Posts (0=No Limit)")
+        #self.user_label = tk.Label(self, text="Group Name:")
+        self.group_entry.grid(row=0, column=3, sticky=tk.W, pady=10)
+        self.group_label.grid(row=0, column=2, sticky=tk.E)
+        self.group_max_entry.grid(row=1, column=3, sticky=tk.W, pady=10)
+        self.group_max_label.grid(row=1, column=2, sticky=tk.E, pady=10)
+        self.news_pages_entry.grid(row=2, column=3, sticky=tk.W, pady=10)
+        self.news_pages_label.grid(row=2, column=2, sticky=tk.E, pady=10)
 
     def init_window(self):
         """

@@ -13,7 +13,7 @@ import Queue
 from requests.sessions import InvalidSchema
 from requests.models import MissingSchema
 
-VERSION = "0.4"
+VERSION = "0.5"
 """
     CHANGELOG
     0.1 - Initial working code and documentation
@@ -23,6 +23,7 @@ VERSION = "0.4"
           Many bugfixes and improvements
     0.3 - Fixes issues related to closing for Windows
     0.4 - Adds feature to scrape friends list
+    0.5 - Adds feature to scrape group news posts
 """
 
 
@@ -615,6 +616,82 @@ class UserArchiver(Archiver):
                 if self.stoprequest.isSet():
                     return
 
+
+class GroupArchiver(UserArchiver):
+    """
+        Class that handles archiving user based content, such
+        as images and journals
+
+        Args:
+            maximum(:class:`int`): Maximum number of elements to scrape;
+                None for no limit
+            size(:class:`int`): Number of elements to put in one file
+                where applicable
+            path(:class:`str`): Path to the base directory where output
+                will be located
+            verbose(:class:`boolean`): Log debug to console
+            username(:class:`str`): Username to scrape
+            thread_cb(:class:`function`): Function to call when thread completes
+            progress_label(:class:`tk.StringVar`): Location to write updates
+                to for the GUI
+    """
+
+    def __init__(self, maximum, size, path, verbose, username, thread_cb,
+                 progress_label):
+        super(GroupArchiver, self).__init__(maximum, size, path, verbose,
+                                           username, thread_cb, progress_label)
+        self.news_url = "https://roosterteeth.com/group/" + username
+        self.friends_url = None
+        self.img_url = None
+
+    def get_news_posts(self):
+        """
+            Finds and writes all news posts specified by the class
+        """
+        journal_base_url = self.news_url + "?page="
+        hashes = set()
+        news_posts = []
+        num_journals = 0
+        page_num = 1
+        try:
+            while True:
+                self.write_update("Scraping journal page %d" % page_num)
+                activity = self.get_page(journal_base_url + str(page_num))
+                page_num += 1
+                elements = activity.findAll("div", class_="media-content")
+                if not elements:
+                    break
+                for element in elements:
+                    """ Only save news posts """
+                    post_tag = element.find("p", class_="post-tag-label")
+                    if not post_tag:
+                        continue
+                    body = element.find("div", class_="post-content")
+                    body = body.decode_contents()
+                    hashes.add(hash(body))
+                    """ Avoid duplicate news_posts """
+                    if len(hashes) == num_journals:
+                        self.logger.debug("Found duplicate hash")
+                        continue
+                    num_journals += 1
+                    news_posts.append(self.format_journal(element))
+                    if self.maximum is not None and \
+                            num_journals >= self.maximum:
+                        raise LimitReached
+
+                if self.stoprequest.isSet():
+                    self.logger.debug("Halting due to join request")
+                    break
+
+        except LimitReached:
+            pass
+
+        self.logger.debug("Preparing to write %d news posts", len(news_posts))
+        self.write_journals(news_posts)
+
+    def run(self):
+        self.get_news_posts()
+        self.cleanup()
 
 class ImageArchiver(UserArchiver):
     """
