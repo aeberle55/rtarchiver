@@ -44,6 +44,9 @@ This option gives the ability to download your friends list into a text file. Cu
 
 You must provide the username of the user to be scraped. The Max Friends field indicates the maximum number of friends to put into the text file, with 0 being all of the friends.
 
+### Groups
+Selecting the Scrape Groups radio button will allow the user to scrape all news posts created by the given group. It is functionally identical to the Scrape Journals option, but for public facing groups instead of users.
+
 ## Building Instructions
 
 ### Windows 10
